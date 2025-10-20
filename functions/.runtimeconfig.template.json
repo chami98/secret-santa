@@ -1,0 +1,13 @@
+{
+  "sendgrid": {
+    "api_key": "YOUR_SENDGRID_API_KEY",
+    "from_email": "noreply@yourdomain.com",
+    "from_name": "Secret Santa"
+  },
+  "app": {
+    "url": "http://localhost:3000",
+    "support_email": "support@yourdomain.com",
+    "allowed_domain": "ineight.com"
+  }
+}
+

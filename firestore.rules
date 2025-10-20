@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user email matches allowed domain
+    function hasAllowedDomain() {
+      return isAuthenticated() && 
+             request.auth.token.email.matches('.*@ineight[.]com$');
+    }
+    
+    // Helper function to check if user is event organizer
+    function isOrganizer(eventId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/events/$(eventId)).data.organizerUid == request.auth.uid;
+    }
+    
+    // Events collection
+    match /events/{eventId} {
+      // Anyone with allowed domain can read events
+      allow read: if hasAllowedDomain();
+      
+      // Only authenticated users with allowed domain can create events
+      allow create: if hasAllowedDomain() && 
+                       request.resource.data.organizerUid == request.auth.uid;
+      
+      // Only organizer can update or delete events
+      allow update, delete: if isOrganizer(eventId);
+      
+      // Participants subcollection
+      match /participants/{userId} {
+        // Anyone in event can read participants
+        allow read: if hasAllowedDomain();
+        
+        // Users can create their own participant entry or organizer can add them
+        allow create: if hasAllowedDomain() && 
+                         (request.resource.data.uid == request.auth.uid || 
+                          isOrganizer(eventId));
+        
+        // Users can update their own entry or organizer can update
+        allow update: if hasAllowedDomain() && 
+                         (resource.data.uid == request.auth.uid || 
+                          isOrganizer(eventId));
+        
+        // Only organizer can delete participants
+        allow delete: if isOrganizer(eventId);
+      }
+      
+      // Assignments subcollection
+      match /assignments/{userId} {
+        // Users can only read their own assignment, organizer can read all
+        allow read: if hasAllowedDomain() && 
+                       (userId == request.auth.uid || isOrganizer(eventId));
+        
+        // Only server (via Cloud Functions) should write assignments
+        // In practice, we'll use admin SDK, so these rules won't apply
+        allow write: if false;
+      }
+    }
+    
+    // Audit logs (optional) - only organizers can read
+    match /audit/{eventId}/{document=**} {
+      allow read: if isOrganizer(eventId);
+      allow write: if false; // Only server writes
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
